@@ -58,7 +58,11 @@
       "supabaseUrl": "",
       "supabaseAnonKey": "",
       "geminiApiKey": "",
-      "razorpayKeyId": ""
+      "geminiProxyUrl": "",
+      "razorpayKeyId": "",
+      "eas": {
+        "projectId": ""
+      }
     }
   }
 }

@@ -20,11 +20,20 @@ export const env = {
   supabaseAnonKey: read('EXPO_PUBLIC_SUPABASE_ANON_KEY'),
   geminiApiKey: read('EXPO_PUBLIC_GEMINI_API_KEY'),
   geminiModel: read('EXPO_PUBLIC_GEMINI_MODEL', 'gemini-1.5-flash'),
+  /**
+   * If set, the client routes Gemini requests through this Supabase Edge
+   * Function instead of calling Google directly. Strongly recommended for
+   * production so the API key never ships in the bundle.
+   *
+   * Example: https://<project>.supabase.co/functions/v1/gemini-proxy
+   */
+  geminiProxyUrl: read('EXPO_PUBLIC_GEMINI_PROXY_URL'),
   razorpayKeyId: read('EXPO_PUBLIC_RAZORPAY_KEY_ID'),
   googleWebClientId: read('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID'),
   googleIosClientId: read('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID'),
 };
 
 export const hasSupabase = !!(env.supabaseUrl && env.supabaseAnonKey);
-export const hasGemini = !!env.geminiApiKey;
+export const hasGeminiProxy = !!env.geminiProxyUrl;
+export const hasGemini = !!env.geminiApiKey || hasGeminiProxy;
 export const hasRazorpay = !!env.razorpayKeyId;

@@ -74,6 +74,15 @@ export const useAuthStore = create<State & Actions>((set, get) => ({
 
   async signOut() {
     await supabase.auth.signOut().catch(() => null);
+    // Best-effort: clear native Google session so the next sign-in shows the
+    // account picker. Imported lazily to avoid pulling the native module
+    // into the auth store's static graph.
+    try {
+      const { googleSignOut } = await import('@/lib/google-auth');
+      await googleSignOut();
+    } catch {
+      /* ignore */
+    }
     set({ session: null, profile: null });
   },
 }));

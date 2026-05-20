@@ -1,14 +1,22 @@
 import React from 'react';
 import { Pressable, StyleSheet, View, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Text, GlassCard, Divider, Button } from '@/components/ui';
-import { useAuthStore, useEntriesStore, usePremiumStore } from '@/store';
+import {
+  useAuthStore,
+  useEntriesStore,
+  useNotificationsStore,
+  usePremiumStore,
+} from '@/store';
 import { colors, radius, spacing } from '@/theme';
 
 export default function Profile() {
+  const router = useRouter();
   const { profile, signOut } = useAuthStore();
   const { entries } = useEntriesStore();
   const { isPremium, openPaywall } = usePremiumStore();
+  const notifEnabled = useNotificationsStore((s) => s.enabled);
   const premium = isPremium();
   const initials =
     (profile?.full_name ?? profile?.email ?? '?')
@@ -71,7 +79,12 @@ export default function Profile() {
       )}
 
       <View style={{ marginTop: spacing.xl, gap: 2 }}>
-        <SettingRow icon="notifications-outline" label="Notifications" />
+        <SettingRow
+          icon="notifications-outline"
+          label="Notifications"
+          value={notifEnabled ? 'On' : 'Off'}
+          onPress={() => router.push('/notifications-settings')}
+        />
         <SettingRow icon="lock-closed-outline" label="Privacy" />
         <SettingRow icon="cloud-download-outline" label="Export entries" />
         <SettingRow icon="help-circle-outline" label="Help" />
@@ -108,8 +121,9 @@ const Stat: React.FC<{ label: string; value: number | string }> = ({ label, valu
 const SettingRow: React.FC<{
   icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
   label: string;
+  value?: string;
   onPress?: () => void;
-}> = ({ icon, label, onPress }) => (
+}> = ({ icon, label, value, onPress }) => (
   <Pressable
     onPress={onPress}
     style={({ pressed }) => [styles.settingRow, pressed && { backgroundColor: colors.glass }]}
@@ -118,6 +132,11 @@ const SettingRow: React.FC<{
     <Text variant="body" style={{ flex: 1, marginLeft: spacing.base }}>
       {label}
     </Text>
+    {value ? (
+      <Text variant="small" color={colors.textMuted} style={{ marginRight: spacing.sm }}>
+        {value}
+      </Text>
+    ) : null}
     <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
   </Pressable>
 );
