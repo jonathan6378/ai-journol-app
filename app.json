@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "MindMirror",
+    "slug": "mindmirror",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "mindmirror",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#0B0B10"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mindmirror.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "MindMirror uses your microphone to capture voice journal entries.",
+        "NSSpeechRecognitionUsageDescription": "MindMirror transcribes your voice notes locally to help you reflect."
+      }
+    },
+    "android": {
+      "package": "com.mindmirror.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0B10"
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "MindMirror uses your microphone for voice journaling."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#A78BFA"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "tsconfigPaths": true
+    },
+    "extra": {
+      "router": { "origin": false },
+      "supabaseUrl": "",
+      "supabaseAnonKey": "",
+      "geminiApiKey": "",
+      "razorpayKeyId": ""
+    }
+  }
+}
