@@ -140,4 +140,9 @@ export type UserProfile = {
   last_entry_at: string | null;
   timezone: string | null;
   created_at: string;
+  // Notifications
+  expo_push_token: string | null;
+  notifications_enabled: boolean;
+  notification_hour: number; // 0-23 in user's local TZ
+  last_notified_at: string | null;
 };

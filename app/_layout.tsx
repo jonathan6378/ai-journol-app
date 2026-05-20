@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SystemUI from 'expo-system-ui';
 import * as SplashScreen from 'expo-splash-screen';
-import { useAuthStore } from '@/store';
+import { useAuthStore, useNotificationsStore } from '@/store';
 import { colors } from '@/theme';
 import { PaywallHost } from '@/components/paywall/PaywallHost';
 
@@ -16,7 +16,8 @@ SystemUI.setBackgroundColorAsync(colors.bg).catch(() => null);
 function RouteGuard() {
   const segments = useSegments();
   const router = useRouter();
-  const { session, initialized } = useAuthStore();
+  const { session, profile, initialized } = useAuthStore();
+  const hydrateNotifications = useNotificationsStore((s) => s.hydrate);
 
   useEffect(() => {
     if (!initialized) return;
@@ -27,6 +28,11 @@ function RouteGuard() {
       router.replace('/(tabs)');
     }
   }, [session, initialized, segments, router]);
+
+  // Keep the local notifications store in sync with the loaded profile.
+  useEffect(() => {
+    if (profile) hydrateNotifications();
+  }, [profile, hydrateNotifications]);
 
   return null;
 }
@@ -66,6 +72,10 @@ export default function RootLayout() {
           <Stack.Screen
             name="paywall"
             options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          />
+          <Stack.Screen
+            name="notifications-settings"
+            options={{ presentation: 'card', animation: 'slide_from_right' }}
           />
         </Stack>
         <PaywallHost />

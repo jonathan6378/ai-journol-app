@@ -14,7 +14,8 @@
  * any callers.
  */
 
-import { env, hasGemini } from './env';
+import { env, hasGemini, hasGeminiProxy } from './env';
+import { supabase } from './supabase';
 import { EmotionTag, JournalEntry, MemoryNote, Mood } from '@/types';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -27,12 +28,60 @@ type GeminiResponse = {
   promptFeedback?: { blockReason?: string };
 };
 
+/**
+ * Two transports:
+ *
+ *   1. Proxy (preferred for prod) — POST { prompt, jsonMode } to a Supabase
+ *      Edge Function that holds the API key. The user's JWT authenticates
+ *      the request; the function rate-limits and returns plain text.
+ *
+ *   2. Direct (dev fallback) — call Google directly with the client-side
+ *      key. Convenient locally; do NOT ship this configuration to prod.
+ */
 async function geminiFetch(prompt: string, jsonMode = true): Promise<string> {
   if (!hasGemini) {
     throw new Error(
-      'Gemini API key not configured. Set EXPO_PUBLIC_GEMINI_API_KEY in your .env.',
+      'Gemini not configured. Set EXPO_PUBLIC_GEMINI_PROXY_URL (preferred) or EXPO_PUBLIC_GEMINI_API_KEY in your .env.',
     );
   }
+
+  if (hasGeminiProxy) {
+    return geminiFetchViaProxy(prompt, jsonMode);
+  }
+  return geminiFetchDirect(prompt, jsonMode);
+}
+
+async function geminiFetchViaProxy(prompt: string, jsonMode: boolean): Promise<string> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) {
+    throw new Error('Not signed in — cannot call Gemini proxy.');
+  }
+  const res = await fetch(env.geminiProxyUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ prompt, jsonMode, model: env.geminiModel }),
+  });
+  if (res.status === 429) {
+    throw new Error('Rate limited. Take a breath and try again in a moment.');
+  }
+  if (res.status === 401) {
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Gemini proxy ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const json = (await res.json()) as { text?: string; blocked?: boolean };
+  const text = (json.text ?? '').trim();
+  if (!text) throw new Error('Gemini returned an empty response.');
+  return text;
+}
+
+async function geminiFetchDirect(prompt: string, jsonMode: boolean): Promise<string> {
   const url = `${BASE_URL}/${env.geminiModel}:generateContent?key=${env.geminiApiKey}`;
   const res = await fetch(url, {
     method: 'POST',

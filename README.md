@@ -21,8 +21,14 @@ it speaks like a wise friend who has known you for years.
   voice-notes storage bucket, full audit-able subscriptions table.
 - **Real AI memory** — entries are summarized into durable "memory notes"
   (goals, triggers, habits) that future reflections reference naturally.
-- **Server-secured payments** — Razorpay orders are signed by a Supabase
-  Edge Function so the client never sees `KEY_SECRET`.
+- **Server-secured AI + payments** — Gemini calls and Razorpay orders both
+  go through Supabase Edge Functions, so the client never holds API
+  secrets. Per-user rate limiting and JWT verification included.
+- **Native Google Sign-In** — lazy-loaded wrapper, brand-correct button
+  that auto-hides when not configured.
+- **Personalized push notifications** — opt-in, time-of-day picker, local
+  daily reminders by default, and an optional Gemini-personalized server
+  nudge that runs on a Supabase cron.
 - **Defensive everywhere** — app boots without env vars; missing keys are
   surfaced as gentle in-UI messages, never crashes.
 
@@ -39,6 +45,7 @@ ai-journol-app/
 │   ├── (tabs)/              # Today / Insights / Memory / You + tab bar
 │   ├── compose.tsx          # Full-screen modal: write + reflect
 │   ├── entry/[id].tsx       # Entry detail
+│   ├── notifications-settings.tsx   # Toggle + time-of-day picker
 │   └── paywall.tsx
 ├── src/
 │   ├── components/
@@ -46,21 +53,28 @@ ai-journol-app/
 │   │   ├── home/            # MoodPicker, PromptCard, StreakBadge, EntryRow
 │   │   ├── journal/         # ReflectionCard, EmotionTagsRow, VoiceRecorder
 │   │   ├── insights/        # MoodChart, EmotionRing, TrendBullet
-│   │   └── paywall/         # Paywall, PaywallHost
+│   │   ├── paywall/         # Paywall, PaywallHost
+│   │   └── auth/            # GoogleButton
 │   ├── lib/
 │   │   ├── supabase.ts      # Supabase client (AsyncStorage sessions)
-│   │   ├── gemini.ts        # AI service + persona prompt
+│   │   ├── gemini.ts        # AI service + persona prompt (proxy or direct)
+│   │   ├── google-auth.ts   # Lazy native Google Sign-In wrapper
+│   │   ├── notifications.ts # Push token + permissions + local reminder
 │   │   ├── razorpay.ts      # Razorpay client + plan catalog
 │   │   ├── env.ts           # Env access with friendly errors
 │   │   └── api/             # auth, entries, profile, memory
-│   ├── store/               # Zustand: auth, entries, premium, memory
+│   ├── store/               # Zustand: auth, entries, premium, memory, notifications
 │   ├── theme/               # colors, typography, spacing, gradients
 │   ├── types/               # Domain types (Mood, EmotionTag, JournalEntry...)
 │   └── utils/               # date, greeting, prompts, streak, mood
 ├── supabase/
 │   ├── schema.sql           # Tables + RLS + triggers + storage
+│   ├── migrations/
+│   │   └── 0002_notifications.sql   # adds push token + notifications_log
 │   └── functions/
-│       └── create-razorpay-order.ts   # Edge Function
+│       ├── create-razorpay-order.ts # secure order creation
+│       ├── gemini-proxy.ts          # JWT-auth'd AI proxy (no key in client)
+│       └── send-daily-nudge.ts      # cron-driven personalized push
 ├── docs/
 │   ├── SETUP.md
 │   ├── DESIGN.md

@@ -59,33 +59,76 @@ The schema is idempotent — safe to re-run after edits.
 
 ## 4. Gemini
 
-1. Go to https://aistudio.google.com → Get API key.
+You have two options. Pick one — they're mutually exclusive.
+
+### Option A — Direct (dev only)
+
+Quick. The Gemini key ends up in the client bundle, so anyone who pulls
+your APK can extract it. Fine for prototypes and screenshots, **not for
+production**.
+
+1. https://aistudio.google.com → Get API key.
 2. Add to `.env`:
    ```
    EXPO_PUBLIC_GEMINI_API_KEY=AI...
    EXPO_PUBLIC_GEMINI_MODEL=gemini-1.5-flash
    ```
 
-> ⚠️ Shipping the Gemini key in the client is fine for an MVP but exposes
-> you to abuse. For launch, proxy `gemini.ts` through a Supabase Edge
-> Function that holds the key server-side.
+### Option B — Proxy via Supabase Edge Function (recommended for prod)
+
+The key lives in Supabase secrets. The client calls a Supabase Edge
+Function (`gemini-proxy`) authenticated with the user's JWT; the function
+calls Google with the secret key. Includes a per-user rate limit
+(30 reqs / 60 s) and graceful safety-block fallbacks.
+
+```bash
+# 1. Set the secrets
+supabase secrets set GEMINI_API_KEY=AI...
+supabase secrets set GEMINI_MODEL=gemini-1.5-flash
+
+# 2. Deploy
+supabase functions deploy gemini-proxy
+```
+
+3. Note the function URL (printed by the CLI, also visible in the dashboard).
+4. Set in `.env`:
+   ```
+   EXPO_PUBLIC_GEMINI_PROXY_URL=https://<project>.supabase.co/functions/v1/gemini-proxy
+   ```
+
+When the proxy URL is set, the client automatically uses it. You can leave
+`EXPO_PUBLIC_GEMINI_API_KEY` empty in production builds.
 
 ---
 
 ## 5. Google Sign-In (optional)
 
-1. Google Cloud Console → APIs & Services → Credentials.
-2. Create **OAuth client ID** → Web (used by Supabase) and Android (for the
-   native flow).
-3. In Supabase → Authentication → Providers → Google: paste Web client ID +
-   secret. Enable.
-4. In `.env`:
+The Google button is hidden automatically when these env vars are unset, so
+you can ship without it.
+
+1. **Create OAuth clients** — https://console.cloud.google.com → APIs &
+   Services → Credentials → Create credentials → OAuth client ID.
+   - **Web application** — used by Supabase to verify the ID token. Copy
+     the client ID + secret into Supabase → Auth → Providers → Google.
+   - **Android** — package name `com.mindmirror.app`; SHA-1 of your debug
+     keystore (`./gradlew signingReport`) and your upload keystore.
+   - **iOS** (optional) — bundle ID `com.mindmirror.app`.
+2. **Configure `.env`:**
    ```
    EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=...apps.googleusercontent.com
+   EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...apps.googleusercontent.com   # optional
    ```
-5. Wire `auth.signInWithGoogle(idToken)` into your sign-in screen using
-   `@react-native-google-signin/google-signin`. The library returns an
-   `idToken` that you pass straight through.
+3. **Confirm Supabase** — Auth → Providers → Google must be enabled with
+   the **Web** client ID/secret.
+
+The native flow is wired in `src/lib/google-auth.ts` and surfaced via
+`src/components/auth/GoogleButton.tsx`. The button calls `googleSignIn()`,
+hands the ID token to `auth.signInWithGoogle()`, which calls
+`supabase.auth.signInWithIdToken({ provider: 'google', token })`. Your
+profile row is auto-created by the `handle_new_user` trigger.
+
+> Google Sign-In requires a dev-client build — it does not run in plain
+> Expo Go. See §8 below.
 
 ---
 
@@ -136,8 +179,8 @@ This protects you against tampered client-side reports.
 
 ## 7. Run on Android
 
-Razorpay and Google Sign-In are **native modules**. They don't run in plain
-Expo Go. You need a development client:
+Razorpay, Google Sign-In, and Expo push notifications are **native modules**.
+They don't run in plain Expo Go. You need a development client:
 
 ```bash
 # One-time
@@ -155,7 +198,70 @@ npx expo start --dev-client
 
 ---
 
-## 8. Sanity checks
+## 8. Push notifications
+
+The base schema is extended by `supabase/migrations/0002_notifications.sql`
+which adds `expo_push_token`, `notifications_enabled`, `notification_hour`,
+and a `notifications_log` table. **Run that migration in your Supabase SQL
+editor.**
+
+### 8.1 Local-only reminders (works without any backend)
+
+Out of the box, when a user toggles notifications on in Profile →
+Notifications, MindMirror schedules a daily local reminder at the chosen
+hour. No server, no token, no cost. Useful for offline use and emulators.
+
+### 8.2 Personalized push from the server
+
+The Edge Function `send-daily-nudge` runs on a schedule, picks users whose
+`notification_hour` matches the current local hour, asks Gemini for a
+single-line in-character nudge, and sends via Expo's push API.
+
+```bash
+# 1. Get an EAS project ID (required for Expo push tokens)
+npx eas init
+
+# 2. Add the project ID to app.json under extra.eas.projectId
+#    (the `eas init` command does this automatically; verify it ran)
+
+# 3. Set Gemini secrets if you haven't yet
+supabase secrets set GEMINI_API_KEY=AI...
+supabase secrets set GEMINI_MODEL=gemini-1.5-flash
+
+# 4. Deploy the function
+supabase functions deploy send-daily-nudge --no-verify-jwt
+
+# 5. Schedule it via Supabase Dashboard → Database → Cron Jobs:
+#    Name:     mindmirror-daily-nudge
+#    Schedule: */30 * * * *      (every 30 min)
+#    SQL:      select net.http_post(
+#                url := 'https://<project>.supabase.co/functions/v1/send-daily-nudge',
+#                headers := jsonb_build_object(
+#                  'Authorization',
+#                  'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key'),
+#                  'Content-Type','application/json'),
+#                body := '{}'::jsonb);
+#    See https://supabase.com/docs/guides/database/extensions/pg_cron
+```
+
+The function reads `notifications_enabled = true` users with a non-null
+`expo_push_token`, computes their local hour from the `timezone` column
+(falls back to UTC), de-dupes within a 23-hour window via
+`profiles.last_notified_at`, and writes every send into `notifications_log`.
+
+### 8.3 Permissions and the EAS project ID
+
+`registerForPushNotifications()` requires:
+- a physical device (emulators silently can't mint tokens)
+- OS-level notification permission
+- an EAS project ID set in `app.json → extra.eas.projectId`
+
+If any of those are missing, the local reminder still works — the settings
+screen surfaces a friendly explanation in the status box.
+
+---
+
+## 9. Sanity checks
 
 - [ ] App boots → Welcome screen with breathing orb
 - [ ] Sign up with email creates a profile row in `profiles`
@@ -177,11 +283,14 @@ warning instead of crashing.
 
 ---
 
-## 9. Production prep
+## 10. Production prep
 
-- Move Gemini calls behind a server.
+- Use the **Gemini proxy** (`EXPO_PUBLIC_GEMINI_PROXY_URL`) — never ship
+  `GEMINI_API_KEY` in the client bundle.
 - Enable Supabase email confirmation.
-- Set up the Razorpay webhook for payment.captured.
+- Set up the Razorpay webhook for `payment.captured` (server-side
+  signature verification beyond what the client reports).
+- Schedule `send-daily-nudge` via pg_cron.
 - Add Sentry / Crashlytics.
 - Run `npx expo doctor` and fix any reported issues.
 - Configure EAS Build (`eas.json`) for signed Play Store builds.

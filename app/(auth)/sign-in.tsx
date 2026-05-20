@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Text, Button } from '@/components/ui';
+import { GoogleButton } from '@/components/auth/GoogleButton';
+import { isGoogleSignInAvailable } from '@/lib/google-auth';
 import { auth } from '@/lib/api';
 import { colors, radius, spacing } from '@/theme';
 
@@ -82,6 +84,22 @@ export default function SignIn() {
             style={{ marginTop: spacing.xl }}
           />
 
+          {isGoogleSignInAvailable() && (
+            <>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text variant="caption" color={colors.textFaint} style={{ marginHorizontal: spacing.md }}>
+                  OR
+                </Text>
+                <View style={styles.dividerLine} />
+              </View>
+              <GoogleButton
+                onSuccess={() => router.replace('/(tabs)')}
+                onError={(msg) => setError(msg)}
+              />
+            </>
+          )}
+
           <Pressable
             style={{ alignSelf: 'center', marginTop: spacing.lg }}
             hitSlop={12}
@@ -147,5 +165,15 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     fontSize: 16,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.divider,
   },
 });
